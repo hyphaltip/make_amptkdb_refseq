@@ -28,18 +28,62 @@ def softwrap(string, every=80):
         lines.append(string[i:i+every])
     return '\n'.join(lines)
 
-def seq_to_ids_single(seq_list,limit=0,verbose=False):
+def seq_to_ids_single(seq_dict,limit=0,verbose=False):
     acc2id = {}
     id2acc = {}
-#   id2org = {}
     i = 0
-    for seq_record in seq_list:
+    for acc in seq_dict:
+        seq_record = seq_dict[acc]
         desc = seq_record.description
         acc = seq_record.id
         taxonlst = desc.split('|')
         lookup = taxonlst.pop()
         # this searches for IDs one at time which is slower but necessary when missing?
  #       tm_pylookup_start = time.time()
+        while lookup:
+            if lookup.startswith('isolate') or lookup.startswith('strain') or lookup.startswith("clone"):
+                lookup = taxonlst.pop()
+            else:
+                lookup = lookup.replace("+", " ")
+                lookup = re.sub(r'^[kpcofgs]:','',lookup)                    
+# this is slower as we are reading in one at a time
+                ptx = pytaxonkit.name2taxid([lookup])
+                keep = False
+                for idx, r in ptx.iterrows():
+                    name = r['Name']
+                    taxid = r['TaxID']
+                    if pd.isna(taxid):
+                        print(f"cannot find taxid for {name} {seq_record.id} {desc} ... will go up a level")
+                        lookup = taxonlst.pop()
+                    else:
+                        acc2id[acc] = [str(taxid), '']
+                        id2acc[str(taxid)] = acc
+                        print(f"storing acc: {acc} to {taxid} and {taxid} -> {acc} based on {lookup} -> {desc}")
+                        keep = True
+            if keep:  # break out of loop if we have found an ID
+                break
+#        tm_pylookup_end = time.time()
+        if i > 0 and i % 1000 == 0:
+            print(f"processed {i} sequences")
+        i += 1
+        if i > limit and limit > 0:
+            break
+    return (acc2id,id2acc)
+
+
+def seq_to_ids_combined(seq_dict,limit=0,verbose=False):
+    acc2id = {}
+    id2acc = {}
+    i = 0
+    for acc in seq_dict:
+        seq_record = seq_dict[acc]
+        desc = seq_record.description
+        acc = seq_record.id
+        taxonlst = desc.split('|')
+        lookup = taxonlst.pop()
+        # this searches for IDs one at time which is slower but necessary when missing?
+ #       tm_pylookup_start = time.time()
+ 
         while lookup:
             if lookup.startswith('isolate') or lookup.startswith('strain') or lookup.startswith("clone"):
                 lookup = taxonlst.pop()
@@ -89,7 +133,7 @@ def main(limit=0,verbose=False):
             print(f"done reading in sequences that took {tm_parse_end - tm_parse_start} seconds")
 
         tm_lookup_start = time.time()
-        (acc2id,id2acc) = seq_to_ids_single(list(seqs.values()),limit,verbose)
+        (acc2id,id2acc) = seq_to_ids_single(seqs,limit,verbose)
         tm_lookup_end = time.time()
         idnum = len(acc2id)
         if verbose:

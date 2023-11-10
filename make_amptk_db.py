@@ -59,7 +59,7 @@ def main(indb="db"):
                             continue
                         (k, v) = t.split(":")
                         if len(v) == 0:
-                            taxonstr = taxonstr.replace(f',{k}:,', '')
+                            taxonstr = taxonstr.replace(f'{k}:,', '')
                     if taxonid in id2org:
                         id2org[taxonid]['taxstring'] = taxonstr
                         org2id[id2org[taxonid]['name']]['taxstring'] = taxonstr

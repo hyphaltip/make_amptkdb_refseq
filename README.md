@@ -4,4 +4,4 @@ requires
  - pytaxonkit
  - biopython
 
-download and install NCBI taxonDB - see https://bioinf.shenwei.me/taxonkit/usage/ 
+Download and install NCBI taxonDB - see https://bioinf.shenwei.me/taxonkit/usage/ 

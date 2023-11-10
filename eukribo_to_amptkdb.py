@@ -5,7 +5,6 @@
 import os
 import gzip
 import re
-import csv
 from subprocess import Popen, PIPE
 from Bio import SeqIO
 import pytaxonkit
@@ -84,18 +83,18 @@ def main():
                 if taxonid in id2org:
                     id2org[taxonid]['taxstring'] = taxonstr
                     org2id[id2org[taxonid]['name']]['taxstring'] = taxonstr
-            for acc in seqs:
-                org = acc2org[acc]
-                taxstring = org2id[org]['taxstring']
-                seq = seqs[acc]
-                ofile.write(f">{acc};tax={taxstring}\n")
-                ofile.write(softwrap(str(seq.seq))+"\n")
+        for acc in seqs:
+            org = acc2org[acc]
+            taxstring = org2id[org]['taxstring']
+            seq = seqs[acc]
+            ofile.write(f">{acc};tax={taxstring}\n")
+            ofile.write(softwrap(str(seq.seq))+"\n")
 
 
 if __name__ == '__main__':
     main()
 
-
+# import csv
 #        tblin = csv.reader(tblfh, delimiter="\t")
 #        header = next(tblin)
 #        print(header)

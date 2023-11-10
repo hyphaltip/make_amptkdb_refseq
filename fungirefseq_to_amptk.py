@@ -3,9 +3,20 @@
 import os
 import gzip
 import re
+import requests
 from subprocess import Popen, PIPE
 from Bio import SeqIO
 import pytaxonkit
+
+fungi_url = 'https://ftp.ncbi.nlm.nih.gov/refseq/TargetedLoci/Fungi'
+fungi_files = ('fungi.ITS.fna.gz', 'fungi.ITS.gbff.gz',
+               'fungi.18SrRNA.fna.gz', 'fungi.18SrRNA.gbff.gz',
+               'fungi.28SrRNA.fna.gz', 'fungi.28SrRNA.gbff.gz')
+
+def download_file(url, filename):
+    response = requests.get(url,timeout=30)
+    with open(filename, 'wb') as f:
+        f.write(response.content)
 
 
 def softwrap(string, every=80):
@@ -16,6 +27,12 @@ def softwrap(string, every=80):
 
 
 def main(indb="db"):
+    if not os.path.exists(indb):
+        os.mkdir(indb)
+    for fname in fungi_files:
+        localfile = os.path.join(indb,fname)
+        if not os.path.exists(localfile):
+            download_file(os.path.join(fungi_url,fname), localfile)
     for filename in os.listdir(indb):
         if filename.endswith(".gbff.gz"):
             seqs = {}
@@ -54,12 +71,7 @@ def main(indb="db"):
                     taxonstr = re.sub(r',$', '', taxonstr)
                     print(taxonstr)
                     # drop empty taxon levels
-                    for t in taxonstr.split(","):
-                        if len(t) == 0:
-                            continue
-                        (k, v) = t.split(":")
-                        if len(v) == 0:
-                            taxonstr = taxonstr.replace(f'{k}:,', '')
+                    taxonstr = re.sub("([kpcofgs]):,",'',taxonstr)
                     if taxonid in id2org:
                         id2org[taxonid]['taxstring'] = taxonstr
                         org2id[id2org[taxonid]['name']]['taxstring'] = taxonstr

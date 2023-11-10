@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 """Create a 18S DB for amptk from EukRibo"""
 
+import argparse
 import os
+import time
 import gzip
 import re
 import pandas as pd
@@ -26,8 +28,49 @@ def softwrap(string, every=80):
         lines.append(string[i:i+every])
     return '\n'.join(lines)
 
+def seq_to_ids_single(seq_list,limit=0,verbose=False):
+    acc2id = {}
+    id2acc = {}
+#   id2org = {}
+    i = 0
+    for seq_record in seq_list:
+        desc = seq_record.description
+        acc = seq_record.id
+        taxonlst = desc.split('|')
+        lookup = taxonlst.pop()
+        # this searches for IDs one at time which is slower but necessary when missing?
+ #       tm_pylookup_start = time.time()
+        while lookup:
+            if lookup.startswith('isolate') or lookup.startswith('strain') or lookup.startswith("clone"):
+                lookup = taxonlst.pop()
+            else:
+                lookup = lookup.replace("+", " ")
+                lookup = re.sub(r'^[kpcofgs]:','',lookup)                    
+# this is slower as we are reading in one at a time
+                ptx = pytaxonkit.name2taxid([lookup])
+                keep = False
+                for idx, r in ptx.iterrows():
+                    name = r['Name']
+                    taxid = r['TaxID']
+                    if pd.isna(taxid):
+                        print(f"cannot find taxid for {name} {seq_record.id} {desc} ... will go up a level")
+                        lookup = taxonlst.pop()
+                    else:
+                        acc2id[acc] = [str(taxid), '']
+                        id2acc[str(taxid)] = acc
+                        print(f"storing acc: {acc} to {taxid} and {taxid} -> {acc} based on {lookup} -> {desc}")
+                        keep = True
+            if keep:  # break out of loop if we have found an ID
+                break
+#        tm_pylookup_end = time.time()
+        if i > 0 and i % 1000 == 0:
+            print(f"processed {i} sequences")
+        i += 1
+        if i > limit and limit > 0:
+            break
+    return (acc2id,id2acc)
 
-def main():
+def main(limit=0,verbose=False):
     taxotable = os.path.basename(eukribotsv).replace("?download=1","")
     taxofas = os.path.basename(eukribofas).replace("?download=1","")
     if not os.path.exists(taxotable):
@@ -37,44 +80,21 @@ def main():
     with gzip.open(taxofas, "rt", encoding='latin-1') as handle, \
         open("eukribo.fasta", "w") as ofile:
         seqs = {}
-        org2id = {}
-        id2org = {}
-        ids = set()
-        i = 0
+        tm_parse_start = time.time()
         for seq_record in SeqIO.parse(handle, "fasta"):
             accession = seq_record.id
             seqs[accession] = seq_record
-            desc = seq_record.description
-            taxonlst = desc.split('|')
-            lookup = taxonlst.pop()
-            # this searches for IDs one at time which is slower but necessary when missing? 
-            while lookup:
-                if lookup.startswith('isolate') or lookup.startswith('strain') or lookup.startswith("clone"):
-                    lookup = taxonlst.pop()
-                else:
-                    lookup = lookup.replace("+", " ")
-                    lookup = re.sub(r'^[kpcofgs]:','',lookup)
-# this is slower as we are reading in one at a time
-                    ptx = pytaxonkit.name2taxid([lookup])
-                    keep = False
-                    for idx, r in ptx.iterrows():
-                        name = r['Name']
-                        taxid = r['TaxID']
-                        if pd.isna(taxid):
-                            print(f"cannot find taxid for {name} {accession} {desc} ... will go up a level")
-                            lookup = taxonlst.pop()
-                        else:
-                            org2id[name] = {'id': str(taxid), 'taxstring': ''}
-                            id2org[str(taxid)] = {'name': name, 'taxstring': ''}
-                            print(f"storing {name} {taxid} based on {lookup} -> {desc}")
-                            ids.add(str(taxid))
-                            keep = True
-                if keep:  # break out of loop if we have found an ID
-                    break
-            if i > 0 and i % 1000 == 0:
-                print(f"processed {i} sequences")
-            i += 1
-        print(sorted(ids))
+        tm_parse_end = time.time()
+        if verbose:
+            print(f"done reading in sequences that took {tm_parse_end - tm_parse_start} seconds")
+
+        tm_lookup_start = time.time()
+        (acc2id,id2acc) = seq_to_ids_single(list(seqs.values()),limit,verbose)
+        tm_lookup_end = time.time()
+        idnum = len(acc2id)
+        if verbose:
+            print(f"Looking up {idnum} IDs took {tm_lookup_end - tm_lookup_start} seconds")
+        ids = list(id2acc.keys())
         cmd = ["taxonkit", 'reformat', '-I', '1', '-F', '-f',
                "'k:{K},p:{p},c:{c},o:{o},f:{f},g:{g},s:{s}'"]
 
@@ -85,43 +105,32 @@ def main():
             (taxonid, taxonstr) = line.split("\t")
             taxonstr = taxonstr.replace('\'', '')
             taxonstr = re.sub(r',$', '', taxonstr)
-            print(taxonstr)
-            # drop empty taxon levels           
+            if verbose:
+                print(f'taxonid is {taxonid} and strmatch is {taxonstr}')
+            # drop empty taxon levels
             taxonstr = re.sub("([kpcofgs]):,",'',taxonstr)
-#            if not m:
-#                print(taxonstr)
-#            for t in taxonstr.split(","):
-#                if len(t) == 0:
-#                    continue
-#                # remove special case of o:Penicillaria (in: tube anenomes)
-#                t = re.sub(r'\(in:.+\)','',t)
-#                if t.count(':') != 1:
-#                    print(t)
-#                (k, v) = t.split(":")
-#                if len(v) == 0:
-#                    taxonstr = taxonstr.replace(f'{k}:,', '')
-            if taxonid in id2org:
-                id2org[taxonid]['taxstring'] = taxonstr
-                org2id[id2org[taxonid]['name']]['taxstring'] = taxonstr
+            if taxonid in id2acc:
+                acc = id2acc[taxonid]
+                acc2id[acc][1] = taxonstr  # store the taxstring associated with acccession and taxonid
+            else:
+                print(f'Taxonid {taxonid} is not found already in acc2id')
+                break
         for acc in seqs:
-            org = acc2org[acc]
-            taxstring = org2id[org]['taxstring']
+            if acc in acc2id:
+                (taxid,taxstring) = acc2id[acc]
+            else:
+                taxstring = ''
             seq = seqs[acc]
             ofile.write(f">{acc};tax={taxstring}\n")
             ofile.write(softwrap(str(seq.seq))+"\n")
 
+parser = argparse.ArgumentParser(description='Process EukRibo 18S db')
+
+# Add arguments
+parser.add_argument('--limit', type=int, default=0, required=False, help='specify a test run of this many lookups')
+parser.add_argument('-v', '--verbose', action='store_true')  
+# Parse the arguments
+args = parser.parse_args()
 
 if __name__ == '__main__':
-    main()
-
-# import csv
-#        tblin = csv.reader(tblfh, delimiter="\t")
-#        header = next(tblin)
-#        print(header)
-#        names = set()
-#        for row in tblin:
-#            print(row)
-#            acc = row[0]
-#            supergroup = row[1]
-#            UniEuk_taxonomy_string = row[4]
-#            print(acc,UniEuk_taxonomy_string)
+    main(args.limit,args.verbose)

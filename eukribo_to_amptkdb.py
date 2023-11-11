@@ -27,7 +27,7 @@ def download_file(url, filename):
 def softwrap(string, every=80):
     lines = []
     for i in range(0, len(string), every):
-        lines.append(string[i : i + every])
+        lines.append(string[i: i + every])
     return "\n".join(lines)
 
 
@@ -79,9 +79,8 @@ def seq_to_ids_single(seq_dict, limit=0, verbose=False):
             if keep:  # break out of loop if we have found an ID
                 break
         #        tm_pylookup_end = time.time()
-        if i > 0 and i % 1000 == 0:
-            if verbose:
-                print(f"processed {i} sequences")
+        if verbose and i > 0 and i % 1000 == 0:
+            print(f"processed {i} sequences")
         i += 1
         if i > limit and limit > 0:
             break
@@ -155,13 +154,13 @@ def seq_to_ids_multi(seq_dict, max_iter=7, limit=0, verbose=False):
         if i > limit and limit > 0:
             break
         seq_record = seq_dict[acc]
-        (idacc,desc) = seq_record.description.split(" ",1)
+        (idacc, desc) = seq_record.description.split(" ", 1)
         acc = seq_record.id
         taxonlst = desc.split("|")
         # col 0 is taxonlist which will be updated as we test
         # col 1 will be the taxid when this works
         # col 2 will be the current taxon string we are searching with (as we pop off col 0)
-        lookups_to_do[acc] = { 'taxonq': taxonlst, 'taxonid': '', 'currentsearch': ''}
+        lookups_to_do[acc] = {'taxonq': taxonlst, 'taxonid': '', 'currentsearch': ''}
         i += 1
 
     updated_number = -1
@@ -275,7 +274,7 @@ parser.add_argument("-v", "--verbose", action="store_true")
 parser.add_argument(
     "-m",
     "--method",
-    default="simple",
+    default="multi",
     choices=["simple", "multi"],
     help="single or multi method for lookup speed",
 )
